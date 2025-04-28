@@ -1,0 +1,79 @@
+version: '3'
+
+services:
+  # PHP Service with Laravel
+  app:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    container_name: vbuz-app
+    restart: unless-stopped
+    volumes:
+      - ./vbuz-webserver:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - vbuz-network
+    depends_on:
+      - db
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+  # Frontend Service with Quasar
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vbuz-frontend
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./frontend:/app
+    networks:
+      - vbuz-network
+
+  # Nginx Service
+  webserver:
+    image: nginx:alpine
+    container_name: vbuz-webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./vbuz-webserver:/var/www
+      - ./frontend/dist/spa:/var/www/public/spa
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+      - ./docker/nginx/ssl/:/etc/nginx/ssl/
+    networks:
+      - vbuz-network
+    depends_on:
+      - app
+      - frontend
+
+  # PostgreSQL Service with PostGIS
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: vbuz-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: laravel
+      POSTGRES_USER: laravel
+      POSTGRES_PASSWORD: secret
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - vbuz-network
+
+networks:
+  vbuz-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
