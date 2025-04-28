@@ -4,13 +4,13 @@ services:
   # PHP Service with Laravel
   app:
     build:
-      context: ./docker
+      context: .
       dockerfile: Dockerfile
     container_name: vbuz-app
     restart: unless-stopped
     volumes:
-      - ./vbuz-webserver:/var/www
-      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ../vbuz-webserver:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
     networks:
       - vbuz-network
     depends_on:
@@ -22,14 +22,14 @@ services:
   # Frontend Service with Quasar
   frontend:
     build:
-      context: ./frontend
+      context: ../vbuz-webapp
       dockerfile: Dockerfile
     container_name: vbuz-frontend
     restart: unless-stopped
     ports:
       - "9000:9000"
     volumes:
-      - ./frontend:/app
+      - ../vbuz-webapp:/app
     networks:
       - vbuz-network
 
@@ -42,10 +42,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./vbuz-webserver:/var/www
-      - ./frontend/dist/spa:/var/www/public/spa
-      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
-      - ./docker/nginx/ssl/:/etc/nginx/ssl/
+      - ../vbuz-webserver:/var/www
+      - ../vbuz-webapp/dist/spa:/var/www/public/spa
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+      - ./nginx/ssl/:/etc/nginx/ssl/
     networks:
       - vbuz-network
     depends_on:
@@ -66,7 +66,7 @@ services:
       PGDATA: /var/lib/postgresql/data
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./docker/postgres/init-scripts:/docker-entrypoint-initdb.d
+      - ./postgres/init-scripts:/docker-entrypoint-initdb.d
     networks:
       - vbuz-network
 

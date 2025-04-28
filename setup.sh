@@ -36,7 +36,7 @@ EOF
 # Caso não exista projeto Laravel, criar um novo com Composer
 if [ ! -d "../vbuz-webserver" ]; then
   echo "Criando um novo projeto Laravel 12..."
-  docker run --rm -v $(pwd)/..:/app composer create-project --prefer-dist laravel/laravel vbuz-webserver
+  vbuz-infra run --rm -v $(pwd)/..:/app composer create-project --prefer-dist laravel/laravel vbuz-webserver
   
   # Configurar .env para PostgreSQL com PostGIS
   sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=pgsql/g' ../vbuz-webserver/.env
