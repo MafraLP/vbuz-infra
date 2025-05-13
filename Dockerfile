@@ -50,4 +50,17 @@ USER www
 
 # Expose port 9000 and start php-fpm server
 EXPOSE 9000
+
+# No final do seu Dockerfile
+ARG WWWUSER=1000
+ARG WWWGROUP=1000
+
+# Criar usuário não-root com seus IDs
+RUN groupmod -o -g ${WWWGROUP} www-data && \
+    usermod -o -u ${WWWUSER} -g www-data www-data
+
+# Alterar permissões do diretório de trabalho
+RUN chown -R www-data:www-data /var/www
+USER www-data
+
 CMD ["php-fpm"]

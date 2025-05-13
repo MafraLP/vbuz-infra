@@ -3,35 +3,38 @@ version: '3'
 services:
   # PHP Service with Laravel
   app:
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - WWWUSER=${UID:-1000}
+      - WWWGROUP=${GID:-1000}
     build:
-      context: .
+      context: ../vbuz-webserver
       dockerfile: Dockerfile
     container_name: vbuz-app
     restart: unless-stopped
     volumes:
       - ../vbuz-webserver:/var/www
-      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
     networks:
       - vbuz-network
-    depends_on:
-      - db
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
+
 
   # Frontend Service with Quasar
   frontend:
-    build:
-      context: ../vbuz-webapp
-      dockerfile: Dockerfile
+    image: node:18-alpine
     container_name: vbuz-frontend
     restart: unless-stopped
+    working_dir: /app
     ports:
       - "9000:9000"
     volumes:
       - ../vbuz-webapp:/app
     networks:
       - vbuz-network
+    command: >
+      sh -c "npm install -g @quasar/cli &&
+             cd /app &&
+             if [ ! -d 'node_modules' ]; then npm install; fi &&
+             quasar dev -p 9000 --hostname 0.0.0.0"
 
   # Nginx Service
   webserver:
@@ -43,9 +46,7 @@ services:
       - "443:443"
     volumes:
       - ../vbuz-webserver:/var/www
-      - ../vbuz-webapp/dist/spa:/var/www/public/spa
       - ./nginx/conf.d/:/etc/nginx/conf.d/
-      - ./nginx/ssl/:/etc/nginx/ssl/
     networks:
       - vbuz-network
     depends_on:
@@ -60,7 +61,7 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: laravel
+      POSTGRES_DB: vbuz
       POSTGRES_USER: laravel
       POSTGRES_PASSWORD: secret
       PGDATA: /var/lib/postgresql/data
