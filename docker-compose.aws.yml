@@ -1,0 +1,167 @@
+version: '3'
+
+services:
+  # PHP Service with Laravel
+  app:
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - WWWUSER=${UID:-1000}
+      - WWWGROUP=${GID:-1000}
+    build:
+      context: ../vbuz-webserver
+      dockerfile: Dockerfile
+    container_name: vbuz-app
+    volumes:
+      - ../vbuz-webserver:/var/www
+    networks:
+      - vbuz-network
+
+  # ALTERNATIVA RÁPIDA: Worker usando mesma imagem do app
+  queue-worker:
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - WWWUSER=${UID:-1000}
+      - WWWGROUP=${GID:-1000}
+      - APP_ENV=${APP_ENV:-local}
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_DATABASE=vbuz
+      - DB_USERNAME=laravel
+      - DB_PASSWORD=secret
+      - QUEUE_CONNECTION=database
+    # USE BUILD CONTEXT INSTEAD OF IMAGE
+    build:
+      context: ../vbuz-webserver
+      dockerfile: Dockerfile
+    container_name: vbuz-queue-worker
+    volumes:
+      - ../vbuz-webserver:/var/www
+    networks:
+      - vbuz-network
+    depends_on:
+      - app
+    # Comando diferente - só rodar o worker
+    command: >
+      bash -c "
+        echo '🚀 Iniciando Worker...' &&
+        cd /var/www &&
+        while ! php artisan migrate:status > /dev/null 2>&1; do
+          echo '⏳ Aguardando banco...'
+          sleep 2
+        done &&
+        echo '✅ Banco disponível' &&
+        echo '🎯 Iniciando queue worker...' &&
+        php artisan queue:work --verbose --tries=3 --timeout=600 --sleep=3
+      "
+
+  # Frontend Service with Quasar
+  frontend:
+    image: node:18-alpine
+    container_name: vbuz-frontend
+    working_dir: /app
+    ports:
+      - "9000:9000"
+    volumes:
+      - ../vbuz-webapp:/app
+    networks:
+      - vbuz-network
+    command: >
+      sh -c "npm install -g @quasar/cli &&
+             cd /app &&
+             if [ ! -d 'node_modules' ]; then npm install; fi &&
+             quasar dev -p 9000 --hostname 0.0.0.0"
+
+  # Nginx Service
+  webserver:
+    image: nginx:alpine
+    container_name: vbuz-webserver
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../vbuz-webserver:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - vbuz-network
+    depends_on:
+      - app
+      - frontend
+
+  # OSRM - Download dos dados (Alpine com curl)
+  osrm-download:
+    image: alpine:latest
+    volumes:
+      - ./osrm-data:/data
+    working_dir: /data
+    command: >
+      sh -c "
+        echo 'Iniciando download OSRM...' &&
+        apk add --no-cache curl &&
+      
+        if [ ! -f santa-catarina-latest.osm.pbf ]; then
+          echo 'Baixando dados de Santa Catarina (~300MB)...' &&
+          curl -L -o sul-latest.osm.pbf https://download.geofabrik.de/south-america/brazil/sul-latest.osm.pbf &&
+          echo 'Download concluído!' &&
+          ln -sf sul-latest.osm.pbf santa-catarina-latest.osm.pbf
+        else
+          echo 'Dados já baixados!'
+        fi
+      "
+    restart: "no"
+    networks:
+      - vbuz-network
+
+  # OSRM - Processamento dos dados (OSRM tools)
+  osrm-data-prep:
+    image: osrm/osrm-backend:latest
+    volumes:
+      - ./osrm-data:/data
+    working_dir: /data
+    command: >
+      sh -c "
+        if [ ! -f santa-catarina-latest.osrm ]; then
+          echo 'Processando dados OSM para OSRM (5-15 minutos)...' &&
+          osrm-extract -p /opt/car.lua santa-catarina-latest.osm.pbf &&
+          echo 'Extract concluído! Fazendo partition...' &&
+          osrm-partition santa-catarina-latest.osrm &&
+          echo 'Partition concluído! Fazendo customize...' &&
+          osrm-customize santa-catarina-latest.osrm &&
+          echo 'OSRM preparado com sucesso!'
+        else
+          echo 'Dados OSRM já processados!'
+        fi
+      "
+    restart: "no"
+    networks:
+      - vbuz-network
+    depends_on:
+      osrm-download:
+        condition: service_completed_successfully
+
+  # OSRM - Servidor (unchanged)
+  osrm-backend:
+    image: osrm/osrm-backend:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+    working_dir: /data
+    command: >
+      sh -c "
+        echo 'Iniciando servidor OSRM...' &&
+        osrm-routed --algorithm mld santa-catarina-latest.osrm
+      "
+    depends_on:
+      osrm-data-prep:
+        condition: service_completed_successfully
+    networks:
+      - vbuz-network
+networks:
+  vbuz-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+  redis_data:
+    driver: local
