@@ -11,7 +11,6 @@ services:
       context: ../vbuz-webserver
       dockerfile: Dockerfile
     container_name: vbuz-app
-    restart: unless-stopped
     volumes:
       - ../vbuz-webserver:/var/www
     networks:
@@ -37,7 +36,6 @@ services:
       context: ../vbuz-webserver
       dockerfile: Dockerfile
     container_name: vbuz-queue-worker
-    restart: unless-stopped
     volumes:
       - ../vbuz-webserver:/var/www
     networks:
@@ -63,7 +61,6 @@ services:
   frontend:
     image: node:18-alpine
     container_name: vbuz-frontend
-    restart: unless-stopped
     working_dir: /app
     ports:
       - "9000:9000"
@@ -81,7 +78,6 @@ services:
   webserver:
     image: nginx:alpine
     container_name: vbuz-webserver
-    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -98,7 +94,6 @@ services:
   db:
     image: postgis/postgis:15-3.3
     container_name: vbuz-db
-    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -175,7 +170,6 @@ services:
         echo 'Iniciando servidor OSRM...' &&
         osrm-routed --algorithm mld santa-catarina-latest.osrm
       "
-    restart: unless-stopped
     depends_on:
       osrm-data-prep:
         condition: service_completed_successfully
